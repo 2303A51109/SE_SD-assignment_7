@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Food Delivery App — Observer / Strategy / Command (Demo)</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;color-scheme:dark}
+    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;background:linear-gradient(180deg,#071022 0%, #071b2a 100%);color:#e6eef6}
+    .app{max-width:1100px;margin:24px auto;padding:20px}
+    h1{margin:0 0 12px;font-size:20px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+    .card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.03);padding:14px;border-radius:10px}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input,select,button{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    button{cursor:pointer}
+    .row{display:flex;gap:8px;align-items:center}
+    .muted{color:var(--muted);font-size:13px}
+    .list{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+    .item{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
+    .log{height:320px;overflow:auto;padding:10px;background:#05111a;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
+    .small{font-size:12px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .badge{padding:6px 8px;border-radius:999px;background:rgba(6,182,212,0.12);color:var(--accent);font-weight:600}
+    footer{margin-top:10px;color:var(--muted);font-size:12px}
+    pre{white-space:pre-wrap;margin:0}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Food Delivery App — Observer / Strategy / Command (Demo)</h1>
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="muted">Selected Restaurant</div>
+              <strong>Spice House</strong>
+            </div>
+            <div class="badge">Demo Mode</div>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)">
+
+          <div>
+            <label>Delivery Agents (Observers)</label>
+            <div id="agentsList" class="list"></div>
+            <div style="margin-top:10px" class="row">
+              <input id="agentName" placeholder="Agent name..." />
+              <button id="addAgentBtn">Add Agent</button>
+            </div>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)">
+
+          <div>
+            <label>Delivery Fee Strategy</label>
+            <select id="strategySelect">
+              <option value="standard">Standard Delivery</option>
+              <option value="express">Express Delivery</option>
+              <option value="free">Free-Coupon Delivery</option>
+            </select>
+            <div class="muted small" style="margin-top:8px">Change strategy to see dynamic fee changes.</div>
+          </div>
+
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="muted">Commands</div>
+          <div class="controls" style="margin-top:8px">
+            <button id="undoBtn">Undo (simple stack)</button>
+            <button id="redoBtn">Redo (not fully implemented)</button>
+            <button id="clearLogBtn">Clear Log</button>
+          </div>
+          <div style="margin-top:10px">
+            <div class="muted">Command history</div>
+            <div id="history" class="list small"></div>
+          </div>
+        </div>
+
+        <footer>Patterns: <strong>Observer</strong> (restaurant → agents), <strong>Strategy</strong> (fee calc), <strong>Command</strong> (place/cancel/track)</footer>
+      </div>
+
+      <div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <label>Place Order</label>
+              <div class="muted small">Fill details and press Place Order</div>
+            </div>
+            <div class="muted">Order ID will be generated</div>
+          </div>
+
+          <div style="margin-top:8px;display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:end">
+            <div>
+              <label>Customer Name</label>
+              <input id="custName" placeholder="e.g. Alice" />
+            </div>
+            <div>
+              <label>Distance (km)</label>
+              <input id="distance" type="number" min="0" value="3" />
+            </div>
+          </div>
+
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button id="placeOrderBtn">Place Order</button>
+            <button id="simulateCancelBtn">Simulate Cancel</button>
+            <button id="trackOrderBtn">Track Last</button>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)">
+
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div class="muted">Orders</div>
+              <div id="ordersList" class="list"></div>
+            </div>
+            <div style="width:280px">
+              <div class="muted">Activity Log</div>
+              <div id="log" class="log"><pre id="logPre"></pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /***** Simple in-browser demo implementing the three patterns in JS *****/
+
+    // ---------- Utilities ----------
+    function uid(prefix = ''){ return prefix + Math.random().toString(36).slice(2,9); }
+    function now(){ return new Date().toLocaleTimeString(); }
+    function appendLog(msg){
+      const p = document.getElementById('logPre');
+      p.textContent = now() + ' — ' + msg + '\n' + p.textContent;
+    }
+
+    // ---------- Observer Pattern (Subject / Observer) ----------
+    class Subject {
+      constructor(){ this.observers = []; }
+      addObserver(o){ this.observers.push(o); }
+      removeObserver(o){ this.observers = this.observers.filter(x => x !== o); }
+      notify(order){ this.observers.forEach(o => o.update(order)); }
+    }
+
+    class DeliveryAgent {
+      constructor(name){ this.id = uid('agent_'); this.name = name; }
+      update(order){ appendLog(`[AGENT:${this.name}] Notified of new order ${order.id} (cust:${order.customer})`); }
+    }
+
+    // Restaurant acts as subject
+    class Restaurant extends Subject {
+      constructor(name){ super(); this.name = name; }
+      receiveOrder(order){
+        appendLog(`[RESTAURANT:${this.name}] Received order ${order.id}. Notifying agents...`);
+        this.notify(order);
+      }
+    }
+
+    // ---------- Strategy Pattern (Delivery Fee) ----------
+    class DeliveryStrategy { calculate(distance){ throw 'Not implemented'; } }
+    class StandardDelivery extends DeliveryStrategy { calculate(distance){ return 20 + distance * 5; } }
+    class ExpressDelivery extends DeliveryStrategy { calculate(distance){ return 50 + distance * 8; } }
+    class FreeCouponDelivery extends DeliveryStrategy { calculate(distance){ return 0; } }
+
+    class DeliveryFeeContext {
+      constructor(strategy){ this.strategy = strategy || new StandardDelivery(); }
+      setStrategy(s){ this.strategy = s; }
+      calculate(distance){ return this.strategy.calculate(distance); }
+    }
+
+    // ---------- Command Pattern ----------
+    class Command {
+      execute(){ throw 'execute not implemented'; }
+      undo(){ /* optional */ }
+    }
+
+    // Simple in-memory order store (for demo)
+    const OrderStore = {
+      orders: [],
+      add(order){ this.orders.push(order); },
+      remove(id){ this.orders = this.orders.filter(o => o.id !== id); },
+      get(id){ return this.orders.find(o => o.id === id); },
+      last(){ return this.orders[this.orders.length-1]; }
+    };
+
+    class PlaceOrderCommand extends Command {
+      constructor(order, restaurant, feeContext){ super(); this.order = order; this.restaurant = restaurant; this.feeContext = feeContext; }
+      execute(){
+        // compute fee
+        this.order.fee = this.feeContext.calculate(this.order.distance);
+        OrderStore.add(this.order);
+        appendLog(`[COMMAND] PlaceOrder: ${this.order.id} (fee: ₹${this.order.fee.toFixed(2)})`);
+        // restaurant notifies agents
+        this.restaurant.receiveOrder(this.order);
+      }
+      undo(){ OrderStore.remove(this.order.id); appendLog(`[UNDO] Removed order ${this.order.id}`); }
+    }
+
+    class CancelOrderCommand extends Command {
+      constructor(orderId){ super(); this.orderId = orderId; this._backup = null; }
+      execute(){
+        const o = OrderStore.get(this.orderId);
+        if(!o){ appendLog(`[COMMAND] CancelOrder: Order ${this.orderId} not found`); return; }
+        this._backup = JSON.parse(JSON.stringify(o));
+        OrderStore.remove(this.orderId);
+        appendLog(`[COMMAND] CancelOrder executed: ${this.orderId}`);
+      }
+      undo(){ if(this._backup){ OrderStore.add(this._backup); appendLog(`[UNDO] Restored canceled order ${this.orderId}`); } }
+    }
+
+    class TrackOrderCommand extends Command {
+      constructor(orderId){ super(); this.orderId = orderId; }
+      execute(){
+        const o = OrderStore.get(this.orderId);
+        if(!o){ appendLog(`[COMMAND] TrackOrder: Order ${this.orderId} not found`); return; }
+        appendLog(`[COMMAND] TrackOrder: Order ${o.id} current status: ${o.status}`);
+      }
+    }
+
+    // ---------- App Setup and UI glue ----------
+    const restaurant = new Restaurant('Spice House');
+    const feeContext = new DeliveryFeeContext(new StandardDelivery());
+
+    // Command history (simple stack)
+    const commandStack = [];
+    const redoStack = [];
+
+    function addAgentUI(agent){
+      const list = document.getElementById('agentsList');
+      const div = document.createElement('div'); div.className = 'item';
+      const left = document.createElement('div'); left.innerHTML = `<strong>${agent.name}</strong><div class='muted small'>${agent.id}</div>`;
+      const right = document.createElement('div');
+      const removeBtn = document.createElement('button'); removeBtn.textContent = 'Remove';
+      removeBtn.onclick = ()=>{ restaurant.removeObserver(agent); list.removeChild(div); appendLog(`[UI] Removed agent ${agent.name}`); renderAgentsList(); };
+      right.appendChild(removeBtn);
+      div.appendChild(left); div.appendChild(right);
+      list.prepend(div);
+    }
+
+    function renderAgentsList(){
+      // currently handled by individual add/remove actions; kept for possible refresh
+    }
+
+    function renderOrders(){
+      const list = document.getElementById('ordersList'); list.innerHTML = '';
+      OrderStore.orders.slice().reverse().forEach(o => {
+        const div = document.createElement('div'); div.className = 'item';
+        const left = document.createElement('div'); left.innerHTML = `<strong>${o.customer}</strong><div class='muted small'>ID: ${o.id} • ${o.distance} km • fee ₹${o.fee?.toFixed(2) ?? '—'}</div>`;
+        const right = document.createElement('div');
+        const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = ()=>{ executeCommand(new CancelOrderCommand(o.id)); renderOrders(); updateHistoryUI(); };
+        const trackBtn = document.createElement('button'); trackBtn.textContent = 'Track'; trackBtn.style.marginLeft='6px';
+        trackBtn.onclick = ()=>{ executeCommand(new TrackOrderCommand(o.id)); };
+        right.appendChild(cancelBtn); right.appendChild(trackBtn);
+        div.appendChild(left); div.appendChild(right);
+        list.appendChild(div);
+      });
+    }
+
+    function updateHistoryUI(){
+      const hist = document.getElementById('history'); hist.innerHTML = '';
+      commandStack.slice().reverse().forEach((c, idx) => {
+        const d = document.createElement('div'); d.className = 'item small'; d.textContent = c._label || c.constructor.name; hist.appendChild(d);
+      });
+    }
+
+    function executeCommand(cmd){
+      // label for UI
+      cmd._label = cmd.constructor.name + (cmd.order ? ' ' + cmd.order.id : (cmd.orderId? ' ' + cmd.orderId : ''));
+      cmd.execute();
+      commandStack.push(cmd);
+      redoStack.length = 0;
+      updateHistoryUI();
+      renderOrders();
+    }
+
+    // ---------- Wire up UI ----------
+    document.getElementById('addAgentBtn').onclick = ()=>{
+      const name = document.getElementById('agentName').value.trim() || ('Agent'+Math.floor(Math.random()*90+10));
+      const a = new DeliveryAgent(name);
+      restaurant.addObserver(a);
+      addAgentUI(a);
+      appendLog(`[UI] Added agent ${a.name}`);
+      document.getElementById('agentName').value = '';
+    };
+
+    document.getElementById('strategySelect').onchange = (e)=>{
+      const v = e.target.value;
+      if(v==='standard') feeContext.setStrategy(new StandardDelivery());
+      else if(v==='express') feeContext.setStrategy(new ExpressDelivery());
+      else feeContext.setStrategy(new FreeCouponDelivery());
+      appendLog(`[UI] Strategy changed to ${v}`);
+    };
+
+    document.getElementById('placeOrderBtn').onclick = ()=>{
+      const cust = document.getElementById('custName').value.trim() || 'Customer'+Math.floor(Math.random()*900);
+      const distance = Math.max(0, Number(document.getElementById('distance').value || 0));
+      const order = { id: uid('ord_'), customer: cust, distance: distance, status: 'Placed', createdAt: Date.now() };
+      const cmd = new PlaceOrderCommand(order, restaurant, feeContext);
+      executeCommand(cmd);
+    };
+
+    document.getElementById('simulateCancelBtn').onclick = ()=>{
+      const last = OrderStore.last();
+      if(!last){ appendLog('[UI] No last order to cancel'); return; }
+      const cmd = new CancelOrderCommand(last.id);
+      executeCommand(cmd);
+    };
+
+    document.getElementById('trackOrderBtn').onclick = ()=>{
+      const last = OrderStore.last();
+      if(!last){ appendLog('[UI] No last order to track'); return; }
+      const cmd = new TrackOrderCommand(last.id);
+      executeCommand(cmd);
+    };
+
+    document.getElementById('undoBtn').onclick = ()=>{
+      const cmd = commandStack.pop();
+      if(!cmd){ appendLog('[UI] Nothing to undo'); return; }
+      if(typeof cmd.undo === 'function') cmd.undo();
+      redoStack.push(cmd);
+      updateHistoryUI(); renderOrders();
+    };
+
+    document.getElementById('redoBtn').onclick = ()=>{
+      const cmd = redoStack.pop();
+      if(!cmd){ appendLog('[UI] Nothing to redo'); return; }
+      if(typeof cmd.execute === 'function') cmd.execute();
+      commandStack.push(cmd);
+      updateHistoryUI(); renderOrders();
+    };
+
+    document.getElementById('clearLogBtn').onclick = ()=>{ document.getElementById('logPre').textContent = ''; };
+
+    // Seed with two agents
+    (function seed(){
+      ['Ravi','Sneha','Vikram'].forEach(n => { const a=new DeliveryAgent(n); restaurant.addObserver(a); addAgentUI(a); });
+      appendLog('[SYSTEM] Demo ready — add agents, change strategy, place orders');
+    })();
+
+  </script>
+</body>
+</html>
